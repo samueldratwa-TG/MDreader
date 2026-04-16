@@ -1906,45 +1906,52 @@ return He}()
   });
 
   // ===== File loading =====
-  function loadFile(file, idx) {
-    if (!file) return;
-    var ext = file.name.split('.').pop().toLowerCase();
-    if (ext !== 'md' && ext !== 'mdx') {
-      alert('Please drop an .md or .mdx file.');
-      return;
-    }
+  function isValidExt(name) {
+    var ext = name.split('.').pop().toLowerCase();
+    return ext === 'md' || ext === 'mdx';
+  }
+
+  function readAndStore(file, handle, idx, callback) {
     var reader = new FileReader();
     reader.onload = function(e) {
-      state.files[idx] = { name: file.name, text: e.target.result, fileRef: file };
-      updateLayout();
+      state.files[idx] = { name: file.name, text: e.target.result, handle: handle || null };
+      if (callback) callback();
     };
     reader.readAsText(file);
   }
 
-  // ===== Multi-file loader =====
-  function loadMultipleFiles(fileList, startIdx) {
-    var valid = [];
-    for (var i = 0; i < fileList.length; i++) {
-      var ext = fileList[i].name.split('.').pop().toLowerCase();
-      if (ext === 'md' || ext === 'mdx') valid.push(fileList[i]);
-    }
-    if (valid.length === 0) return;
-    if (valid.length === 1) {
-      loadFile(valid[0], startIdx);
+  function loadFile(file, idx, handle) {
+    if (!file || !isValidExt(file.name)) {
+      if (file) alert('Please drop an .md or .mdx file.');
       return;
     }
-    // Two or more — load first two into pane 0 and pane 1
+    readAndStore(file, handle, idx, updateLayout);
+  }
+
+  function loadMultipleFiles(files, handles, startIdx) {
+    var valid = [];
+    for (var i = 0; i < files.length; i++) {
+      if (isValidExt(files[i].name)) valid.push({ file: files[i], handle: handles ? handles[i] : null });
+    }
+    if (valid.length === 0) return;
+    if (valid.length === 1) { loadFile(valid[0].file, startIdx, valid[0].handle); return; }
     var loaded = 0;
     for (var j = 0; j < 2; j++) {
-      (function(idx, file) {
-        var reader = new FileReader();
-        reader.onload = function(e) {
-          state.files[idx] = { name: file.name, text: e.target.result, fileRef: file };
-          if (++loaded === 2) updateLayout();
-        };
-        reader.readAsText(file);
-      })(j, valid[j]);
+      readAndStore(valid[j].file, valid[j].handle, j, function() {
+        if (++loaded === 2) updateLayout();
+      });
     }
+  }
+
+  // Try to extract FileSystemFileHandles from a drop event (async, HTTPS only)
+  function extractHandles(dataTransfer, callback) {
+    var items = dataTransfer.items;
+    if (!items || !items[0] || !items[0].getAsFileSystemHandle) { callback(null); return; }
+    var promises = [];
+    for (var i = 0; i < items.length; i++) {
+      promises.push(items[i].getAsFileSystemHandle());
+    }
+    Promise.all(promises).then(function(h) { callback(h); }).catch(function() { callback(null); });
   }
 
   // ===== Drop zones =====
@@ -1956,47 +1963,34 @@ return He}()
 
     fileInputs[idx].addEventListener('change', function(e) {
       var files = e.target.files;
-      if (files.length > 1) {
-        loadMultipleFiles(files, idx);
-      } else if (files[0]) {
-        loadFile(files[0], idx);
-      }
+      if (files.length > 1) { loadMultipleFiles(files, null, idx); }
+      else if (files[0]) { loadFile(files[0], idx, null); }
       e.target.value = '';
     });
 
-    zone.addEventListener('dragover', function(e) {
-      e.preventDefault();
-      zone.classList.add('drag-over');
-    });
-    zone.addEventListener('dragleave', function(e) {
-      e.preventDefault();
-      zone.classList.remove('drag-over');
-    });
+    zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function(e) { e.preventDefault(); zone.classList.remove('drag-over'); });
     zone.addEventListener('drop', function(e) {
       e.preventDefault();
       zone.classList.remove('drag-over');
       var files = e.dataTransfer.files;
-      if (files.length > 1) {
-        loadMultipleFiles(files, idx);
-      } else if (files[0]) {
-        loadFile(files[0], idx);
-      }
+      extractHandles(e.dataTransfer, function(handles) {
+        if (files.length > 1) { loadMultipleFiles(files, handles, idx); }
+        else if (files[0]) { loadFile(files[0], idx, handles ? handles[0] : null); }
+      });
     });
   });
 
   // Also allow dropping on the whole pane body when content is showing
   bodies.forEach(function(body, idx) {
-    body.addEventListener('dragover', function(e) {
-      e.preventDefault();
-    });
+    body.addEventListener('dragover', function(e) { e.preventDefault(); });
     body.addEventListener('drop', function(e) {
       e.preventDefault();
       var files = e.dataTransfer.files;
-      if (files.length > 1) {
-        loadMultipleFiles(files, idx);
-      } else if (files[0]) {
-        loadFile(files[0], idx);
-      }
+      extractHandles(e.dataTransfer, function(handles) {
+        if (files.length > 1) { loadMultipleFiles(files, handles, idx); }
+        else if (files[0]) { loadFile(files[0], idx, handles ? handles[0] : null); }
+      });
     });
   });
 
@@ -2061,45 +2055,34 @@ return He}()
   });
 
   // ===== Reload =====
-  function reloadViaFileRef() {
+  function reloadViaHandles() {
+    // Collect panes that have FileSystemFileHandles (works on HTTPS, gives fresh disk reads)
     var targets = [];
     for (var i = 0; i < 2; i++) {
-      if (state.files[i] && state.files[i].fileRef) targets.push(i);
+      if (state.files[i] && state.files[i].handle) targets.push(i);
     }
     if (targets.length === 0) return false;
 
     var pending = targets.length;
-    var ok = false;
     targets.forEach(function(idx) {
-      var f = state.files[idx];
-      var reader = new FileReader();
-      reader.onload = function(e) {
-        state.files[idx].text = e.target.result;
-        state.files[idx].fileRef = f.fileRef;
-        renderFile(idx);
-        ok = true;
-        if (--pending === 0) showReloadFeedback(ok);
-      };
-      reader.onerror = function() {
-        if (--pending === 0) showReloadFeedback(ok);
-      };
-      try { reader.readAsText(f.fileRef); }
-      catch(e) { if (--pending === 0) showReloadFeedback(ok); }
+      state.files[idx].handle.getFile().then(function(freshFile) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          state.files[idx].text = e.target.result;
+          renderFile(idx);
+          if (--pending === 0) {
+            reloadBtn.innerHTML = '&#8635; Reloaded!';
+            setTimeout(function() { reloadBtn.innerHTML = '&#8635; Reload'; }, 1200);
+          }
+        };
+        reader.readAsText(freshFile);
+      }).catch(function() {
+        if (--pending === 0) reloadViaFilePicker();
+      });
     });
     return true;
   }
 
-  function showReloadFeedback(success) {
-    if (success) {
-      reloadBtn.innerHTML = '&#8635; Reloaded!';
-      setTimeout(function() { reloadBtn.innerHTML = '&#8635; Reload'; }, 1200);
-    } else {
-      // File refs expired — fall back to file picker
-      reloadViaFilePicker();
-    }
-  }
-
-  // Fallback: open a file picker pre-configured to select the same number of files
   function reloadViaFilePicker() {
     var count = 0;
     for (var i = 0; i < 2; i++) if (state.files[i]) count++;
@@ -2113,12 +2096,10 @@ return He}()
       var files = input.files;
       if (!files || files.length === 0) { document.body.removeChild(input); return; }
       if (files.length >= 2 && count >= 2) {
-        loadMultipleFiles(files, 0);
+        loadMultipleFiles(files, null, 0);
       } else {
-        // Reload into whichever pane(s) had files
-        for (var i = 0; i < Math.min(files.length, 2); i++) {
-          var paneIdx = state.files[i] ? i : (state.files[0] ? 1 : 0);
-          loadFile(files[i], i);
+        for (var i = 0; i < Math.min(files.length, count); i++) {
+          loadFile(files[i], i, null);
         }
       }
       document.body.removeChild(input);
@@ -2127,7 +2108,8 @@ return He}()
   }
 
   reloadBtn.addEventListener('click', function() {
-    if (!reloadViaFileRef()) {
+    if (!reloadViaHandles()) {
+      // No handles (file:// protocol) — open file picker
       reloadViaFilePicker();
     }
   });
