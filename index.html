@@ -2061,22 +2061,74 @@ return He}()
   });
 
   // ===== Reload =====
-  reloadBtn.addEventListener('click', function() {
-    var pending = 0;
+  function reloadViaFileRef() {
+    var targets = [];
     for (var i = 0; i < 2; i++) {
-      (function(idx) {
-        var f = state.files[idx];
-        if (!f || !f.fileRef) return;
-        pending++;
-        var reader = new FileReader();
-        reader.onload = function(e) {
-          state.files[idx].text = e.target.result;
-          renderFile(idx);
-          if (--pending === 0) reloadBtn.textContent = '\u21BB Reloaded!';
-          setTimeout(function() { reloadBtn.textContent = '\u21BB Reload'; }, 1200);
-        };
-        reader.readAsText(f.fileRef);
-      })(i);
+      if (state.files[i] && state.files[i].fileRef) targets.push(i);
+    }
+    if (targets.length === 0) return false;
+
+    var pending = targets.length;
+    var ok = false;
+    targets.forEach(function(idx) {
+      var f = state.files[idx];
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        state.files[idx].text = e.target.result;
+        state.files[idx].fileRef = f.fileRef;
+        renderFile(idx);
+        ok = true;
+        if (--pending === 0) showReloadFeedback(ok);
+      };
+      reader.onerror = function() {
+        if (--pending === 0) showReloadFeedback(ok);
+      };
+      try { reader.readAsText(f.fileRef); }
+      catch(e) { if (--pending === 0) showReloadFeedback(ok); }
+    });
+    return true;
+  }
+
+  function showReloadFeedback(success) {
+    if (success) {
+      reloadBtn.innerHTML = '&#8635; Reloaded!';
+      setTimeout(function() { reloadBtn.innerHTML = '&#8635; Reload'; }, 1200);
+    } else {
+      // File refs expired — fall back to file picker
+      reloadViaFilePicker();
+    }
+  }
+
+  // Fallback: open a file picker pre-configured to select the same number of files
+  function reloadViaFilePicker() {
+    var count = 0;
+    for (var i = 0; i < 2; i++) if (state.files[i]) count++;
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.md,.mdx';
+    input.multiple = true;
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.addEventListener('change', function() {
+      var files = input.files;
+      if (!files || files.length === 0) { document.body.removeChild(input); return; }
+      if (files.length >= 2 && count >= 2) {
+        loadMultipleFiles(files, 0);
+      } else {
+        // Reload into whichever pane(s) had files
+        for (var i = 0; i < Math.min(files.length, 2); i++) {
+          var paneIdx = state.files[i] ? i : (state.files[0] ? 1 : 0);
+          loadFile(files[i], i);
+        }
+      }
+      document.body.removeChild(input);
+    });
+    input.click();
+  }
+
+  reloadBtn.addEventListener('click', function() {
+    if (!reloadViaFileRef()) {
+      reloadViaFilePicker();
     }
   });
 
