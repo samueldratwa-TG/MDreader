@@ -1,7 +1,7 @@
 # MD/MDX Viewer — Comfortable MD File Viewer
 
 A single, lightweight, and independent HTML file (~188 KB) designed to comfortably display and compare MarkDown (MD) and MDX files directly in your browser.
-The tool [was created out of a simple need](https://sadot.click/blog/mdreader-story): to comfortably view these MD files without installing complex environments, setting up local servers, or uploading private files to the cloud. It can run directly from the web or work 100% offline.
+The tool [was created out of a simple need](https://sadotlab.com/blog/mdreader-story): to comfortably view these MD files without installing complex environments, setting up local servers, or uploading private files to the cloud. It can run directly from the web or work 100% offline.
 
 ---
 
@@ -42,7 +42,7 @@ Visit the [Project's GitHub Pages](https://samueldratwa-TG.github.io/MDreader/) 
 # MD/MDX Viewer — כלי להצגה נוחה של קבצי MD
 
 קובץ HTML בודד, קליל ועצמאי (~188 KB) שנועד להצגה נוחה ולהשוואת קבצי MarkDown (MD) ו-MDX ישירות בדפדפן שלכם.
-הכלי [נוצר מתוך צורך פשוט](https://sadot.click/blog/mdreader-story): להציג בצורה נוחה את קבצי ה-MD האלה בלי להתקין סביבות עבודה, בלי להרים שרת מקומי ובלי להעלות קבצים פרטיים לענן. הוא יכול לרוץ ישירות מהרשת או לעבוד 100% אופליין.
+הכלי [נוצר מתוך צורך פשוט](https://sadotlab.com/blog/mdreader-story): להציג בצורה נוחה את קבצי ה-MD האלה בלי להתקין סביבות עבודה, בלי להרים שרת מקומי ובלי להעלות קבצים פרטיים לענן. הוא יכול לרוץ ישירות מהרשת או לעבוד 100% אופליין.
 
 ---
 
